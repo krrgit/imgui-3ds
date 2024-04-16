@@ -17,8 +17,7 @@ int main(int argc, char* argv[])
 	static const Tex3DS_SubTexture subt3x = { 512, 256, 0.0f, 1.0f, 1.0f, 0.0f };
    
 	C2D_Image image = (C2D_Image){tex, &subt3x };
-	C3D_TexInit(image.tex, 512, 256, GPU_RGBA8);
-   // C3D_TexSetFilter(image.tex, GPU_LINEAR, GPU_LINEAR);
+	C3D_TexInitVRAM(image.tex, 512, 256, GPU_RGBA8);
 	C3D_TexSetFilter(image.tex, GPU_LINEAR, GPU_LINEAR);
 	C3D_TexSetWrap(image.tex, GPU_REPEAT, GPU_REPEAT);
 	gfxInitDefault();
@@ -78,21 +77,16 @@ int main(int argc, char* argv[])
 		}
 		else
 		io.MouseDown[0] = false;
-		// fill gray (this could be any previous rendering)
-		std::fill_n(pixel_buffer.data(), width * height, 0x19191919u);
+		
+		// Clear buffer by setting alpha to 0
+		static size_t size = image.tex->width * image.tex->height;
+		for (size_t i = 0; i < size; ++i) {
+			((uint8_t*)image.tex->data)[i * 4] = 0x00;
+		}
 
 		// overlay the GUI
-		paint_imgui(pixel_buffer.data(), width, height, sw_options);
+		paint_imgui((uint32_t*)image.tex->data, width, height, sw_options);
 
-		for (u32 x = 0; x < width; x++)
-		{
-			for (u32 y = 0; y < height; y++)
-			{
-				u32 dstPos = ((((y >> 3) * (512 >> 3) + (x >> 3)) << 6) + ((x & 1) | ((y & 1) << 1) | ((x & 2) << 1) | ((y & 2) << 2) | ((x & 4) << 2) | ((y & 4) << 3))) * 4;
-				u32 srcPos = (y * 320 + x) * 4;
-				memcpy(&((u8*)image.tex->data)[dstPos], &((u8*)pixel_buffer.data())[srcPos], 4);
-			}
-		}
 		// draw to screen
 		C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 		C2D_TargetClear(top, C2D_Color32(32, 38, 100, 0xFF));

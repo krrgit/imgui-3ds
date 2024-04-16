@@ -40,38 +40,6 @@ struct PaintTarget
 
 // ----------------------------------------------------------------------------
 
-struct ColorInt
-{
-	uint32_t a, b, g, r;
-
-	ColorInt() = default;
-
-	explicit ColorInt(uint32_t x)
-	{
-		a = (x >> IM_COL32_A_SHIFT) & 0xFFu;
-		b = (x >> IM_COL32_B_SHIFT) & 0xFFu;
-		g = (x >> IM_COL32_G_SHIFT) & 0xFFu;
-		r = (x >> IM_COL32_R_SHIFT) & 0xFFu;
-	}
-
-	uint32_t toUint32() const
-	{
-		return (a << 24u) | (b << 16u) | (g << 8u) | r;
-	}
-};
-
-ColorInt blend(ColorInt target, ColorInt source)
-{
-	ColorInt result;
-	result.a = 0; // Whatever.
-	result.b = (source.b * source.a + target.b * (255 - source.a)) / 255;
-	result.g = (source.g * source.a + target.g * (255 - source.a)) / 255;
-	result.r = (source.r * source.a + target.r * (255 - source.a)) / 255;
-	return result;
-}
-
-// ----------------------------------------------------------------------------
-
 struct Barycentric
 {
 	float w0, w1, w2;
@@ -124,6 +92,16 @@ ImVec4 operator+(const ImVec4& a, const ImVec4& b)
 
 // ----------------------------------------------------------------------------
 // Copies of functions in ImGui, inlined for speed:
+static inline int ImLerp(int a, int b, float t) { return (int)(a + (b - a) * t); }
+
+static inline ImU32 alpha_blend_colors(ImU32 col_a, ImU32 col_b)
+{
+	float t = ((col_b >> IM_COL32_A_SHIFT) & 0xFF) / 255.f;
+	int r = ImLerp((int)(col_a >> IM_COL32_R_SHIFT) & 0xFF, (int)(col_b >> IM_COL32_R_SHIFT) & 0xFF, t);
+	int g = ImLerp((int)(col_a >> IM_COL32_G_SHIFT) & 0xFF, (int)(col_b >> IM_COL32_G_SHIFT) & 0xFF, t);
+	int b = ImLerp((int)(col_a >> IM_COL32_B_SHIFT) & 0xFF, (int)(col_b >> IM_COL32_B_SHIFT) & 0xFF, t);
+	return IM_COL32(r, g, b, 0xFF);
+}
 
 ImVec4 color_convert_u32_to_float4(ImU32 in)
 {
@@ -168,7 +146,7 @@ void paint_uniform_rectangle(
 	const PaintTarget& target,
 	const ImVec2&      min_f,
 	const ImVec2&      max_f,
-	const ColorInt&    color)
+	const ImU32&    color)
 {
 	// Integer bounding box [min, max):
 	int min_x_i = static_cast<int>(target.scale.x * min_f.x + 0.5f);
@@ -184,17 +162,20 @@ void paint_uniform_rectangle(
 
 	// We often blend the same colors over and over again, so optimize for this (saves 25% total cpu):
 	uint32_t last_target_pixel = target.pixels[min_y_i * target.width + min_x_i];
-	uint32_t last_output = blend(ColorInt(last_target_pixel), color).toUint32();
+	uint32_t last_output = alpha_blend_colors(last_target_pixel, color);
 
 	for (int y = min_y_i; y < max_y_i; ++y) {
 		for (int x = min_x_i; x < max_x_i; ++x) {
-			uint32_t& target_pixel = target.pixels[y * target.width + x];
+			uint32_t dstPos = ((((y >> 3) * (512 >> 3) + (x >> 3)) << 6) +
+				((x & 1) | ((y & 1) << 1) | ((x & 2) << 1) |
+					((y & 2) << 2) | ((x & 4) << 2) | ((y & 4) << 3)));
+			uint32_t& target_pixel = target.pixels[dstPos];
 			if (target_pixel == last_target_pixel) {
 				target_pixel = last_output;
 				continue;
 			}
 			last_target_pixel = target_pixel;
-			target_pixel = blend(ColorInt(target_pixel), color).toUint32();
+			target_pixel = alpha_blend_colors(target_pixel, color);
 			last_output = target_pixel;
 		}
 	}
@@ -281,7 +262,7 @@ void paint_triangle(
 
 	// We often blend the same colors over and over again, so optimize for this (saves 10% total cpu):
 	uint32_t last_target_pixel = 0;
-	uint32_t last_output = blend(ColorInt(last_target_pixel), ColorInt(v0.col)).toUint32();
+	uint32_t last_output = alpha_blend_colors(last_target_pixel, v0.col);
 
 	for (int y = min_y_i; y <= max_y_i; ++y) {
 		auto bary = bary_current_row;
@@ -294,8 +275,10 @@ void paint_triangle(
 
 			const float kEps = 1e-4f;
 			if (w0 < -kEps || w1 < -kEps || w2 < -kEps) { continue; } // Outside triangle
-
-			uint32_t& target_pixel = target.pixels[y * target.width + x];
+			uint32_t dstPos = ((((y >> 3) * (512 >> 3) + (x >> 3)) << 6) +
+				((x & 1) | ((y & 1) << 1) | ((x & 2) << 1) |
+					((y & 2) << 2) | ((x & 4) << 2) | ((y & 4) << 3)));
+			uint32_t& target_pixel = target.pixels[dstPos];
 
 			if (has_uniform_color && !texture) {
 				stats->uniform_triangle_pixels += 1;
@@ -304,7 +287,7 @@ void paint_triangle(
 					continue;
 				}
 				last_target_pixel = target_pixel;
-				target_pixel = blend(ColorInt(target_pixel), ColorInt(v0.col)).toUint32();
+				target_pixel = alpha_blend_colors(target_pixel, v0.col);
 				last_output = target_pixel;
 				continue;
 			}
@@ -359,7 +342,7 @@ void paint_draw_cmd(
 	// ImGui uses the first pixel for "white".
 	const ImVec2 white_uv = ImVec2(0.5f / texture->width, 0.5f / texture->height);
 
-	for (int i = 0; i + 3 <= pcmd.ElemCount; ) {
+	for (unsigned int i = 0; i + 3 <= pcmd.ElemCount; ) {
 		const ImDrawVert& v0 = vertices[idx_buffer[i + 0]];
 		const ImDrawVert& v1 = vertices[idx_buffer[i + 1]];
 		const ImDrawVert& v2 = vertices[idx_buffer[i + 2]];
@@ -416,7 +399,7 @@ void paint_draw_cmd(
 				const auto num_pixels = (max.x - min.x) * (max.y - min.y) * target.scale.x * target.scale.y;
 
 				if (!has_texture && has_uniform_color) {
-					paint_uniform_rectangle(target, min, max, ColorInt(v0.col));
+					paint_uniform_rectangle(target, min, max, v0.col);
 					stats->uniform_rectangle_pixels += num_pixels;
 					i += 6;
 					continue;
