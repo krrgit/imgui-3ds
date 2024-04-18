@@ -28,7 +28,7 @@ int main(int argc, char* argv[])
 	C3D_RenderTarget* top = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 	consoleInit(GFX_TOP, NULL);
 	printf("Ho!\n");
-	std::vector<uint32_t> pixel_buffer(width * height, 0);
+	// std::vector<uint32_t> pixel_buffer(width * height, 0);
 
 	ImGui::CreateContext();
 	//ImGui::SetMouseCursor()
@@ -69,7 +69,7 @@ int main(int argc, char* argv[])
 		io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
 		hidTouchRead(&touch);
 
-		printf("px:%d, py:%d\n", touch.px, touch.py);
+		//printf("px:%d, py:%d\n", touch.px, touch.py);
 		if(touch.px && touch.py)
 		{
 			io.MouseDown[0] = true;
@@ -77,22 +77,16 @@ int main(int argc, char* argv[])
 		}
 		else
 		io.MouseDown[0] = false;
-		
-		// Clear buffer by setting alpha to 0
-		static size_t size = image.tex->width * image.tex->height;
-		for (size_t i = 0; i < size; ++i) {
-			((uint8_t*)image.tex->data)[i * 4] = 0x00;
-		}
 
 		// overlay the GUI
-		paint_imgui((uint32_t*)image.tex->data, width, height, sw_options);
+		paint_imgui(width, height, sw_options);
 
 		// draw to screen
 		C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-		C2D_TargetClear(top, C2D_Color32(32, 38, 100, 0xFF));
 		C2D_SceneBegin(top);
 		C2D_DrawImageAt(image, 0.0f, 0.0f, 0.0f, NULL, 1.0f, 1.0f);
 		C3D_FrameEnd(0);
+		C2D_TargetClear(top, C2D_Color32(32,32,32, 0xFF));
 	}
 
 	imgui_sw::unbind_imgui_painting();
