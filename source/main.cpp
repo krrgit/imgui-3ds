@@ -5,6 +5,7 @@
 #include <citro3d.h>
 #include <citro2d.h>
 #include <vector>
+#include <time.h>
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_sw.h"
@@ -13,13 +14,6 @@ int main(int argc, char* argv[])
 {
 	u16 width = 320, height = 240;
 
-	C3D_Tex *tex = (C3D_Tex*)malloc(sizeof(C3D_Tex));
-	static const Tex3DS_SubTexture subt3x = { 512, 256, 0.0f, 1.0f, 1.0f, 0.0f };
-   
-	C2D_Image image = (C2D_Image){tex, &subt3x };
-	C3D_TexInitVRAM(image.tex, 512, 256, GPU_RGBA8);
-	C3D_TexSetFilter(image.tex, GPU_LINEAR, GPU_LINEAR);
-	C3D_TexSetWrap(image.tex, GPU_REPEAT, GPU_REPEAT);
 	gfxInitDefault();
 	C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
 	C2D_Init(C2D_DEFAULT_MAX_OBJECTS);
@@ -28,7 +22,6 @@ int main(int argc, char* argv[])
 	C3D_RenderTarget* top = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 	consoleInit(GFX_TOP, NULL);
 	printf("Ho!\n");
-	// std::vector<uint32_t> pixel_buffer(width * height, 0);
 
 	ImGui::CreateContext();
 	//ImGui::SetMouseCursor()
@@ -41,11 +34,16 @@ int main(int argc, char* argv[])
 	imgui_sw::make_style_fast();
 
 	touchPosition touch;
+	time_t m_Time = 1.0f / 60.0f;
 	while (aptMainLoop()) 
 	{
 		hidScanInput();
 		u32 kHeld = keysDown();
-		io.DeltaTime = 1.0f / 60.0f;
+
+		time_t f_time = time(NULL);
+		io.DeltaTime = m_Time > 0 ? difftime(f_time, m_Time) : (1.0f / 60.0f);
+		m_Time = f_time;
+
 
 		ImGui::NewFrame();
 		ImGui::ShowDemoWindow(NULL);
@@ -79,12 +77,11 @@ int main(int argc, char* argv[])
 		io.MouseDown[0] = false;
 
 		// overlay the GUI
-		paint_imgui(width, height, sw_options);
 
 		// draw to screen
 		C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 		C2D_SceneBegin(top);
-		C2D_DrawImageAt(image, 0.0f, 0.0f, 0.0f, NULL, 1.0f, 1.0f);
+		paint_imgui(width, height, sw_options);
 		C3D_FrameEnd(0);
 		C2D_TargetClear(top, C2D_Color32(32,32,32, 0xFF));
 	}
