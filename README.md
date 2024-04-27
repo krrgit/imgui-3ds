@@ -1,6 +1,6 @@
 # dear imgui - https://github.com/ocornut/imgui
 
-Dear ImGui is a bloat-free graphical user interface library for C++. 
+Dear ImGui is a bloat-free graphical user interface library for C++. This fork has been better optimized for the 3DS.
 
 License
 -------
