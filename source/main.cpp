@@ -41,12 +41,17 @@ int main(int argc, char* argv[])
 	imgui_sw::SwOptions sw_options;
 	imgui_sw::make_style_fast();
 
+	TickCounter frameTime;
 	touchPosition touch;
 	while (aptMainLoop()) 
 	{
 		hidScanInput();
 		u32 kHeld = keysDown();
-		io.DeltaTime = 1.0f / 60.0f;
+
+		osTickCounterUpdate(&frameTime);
+		io.DeltaTime = osTickCounterRead(&frameTime) * 0.001f;
+		osTickCounterStart(&frameTime);
+
 
 		ImGui::NewFrame();
 		ImGui::ShowDemoWindow(NULL);
@@ -70,7 +75,7 @@ int main(int argc, char* argv[])
 		io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
 		hidTouchRead(&touch);
 
-		printf("px:%d, py:%d\n", touch.px, touch.py);
+		// printf("px:%d, py:%d\n", touch.px, touch.py);
 		if(touch.px && touch.py)
 		{
 			io.MouseDown[0] = true;
