@@ -1,27 +1,112 @@
-// This was originally ported by carstene1ns for Nintendo Switch.
-// 3ds port By Kartik(Pirater12) 
-
 #include <3ds.h>
 #include <citro3d.h>
 #include <citro2d.h>
-#include <vector>
 #include <time.h>
+#include <string.h>
+#include "vshader_shbin.h"
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_sw.h"
 
-int main(int argc, char* argv[])
-{
-	u16 width = 320, height = 240;
+#define CLEAR_COLOR 0x68B0D8FF
 
+#define DISPLAY_TRANSFER_FLAGS \
+	(GX_TRANSFER_FLIP_VERT(0) | GX_TRANSFER_OUT_TILED(0) | GX_TRANSFER_RAW_COPY(0) | \
+	GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8) | GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB8) | \
+	GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO))
+
+typedef struct { float x, y, z; } vertex;
+
+static const vertex vertex_list[] =
+{
+	{ 200.0f, 200.0f, 0.5f },
+	{ 100.0f, 40.0f, 0.5f },
+	{ 300.0f, 40.0f, 0.5f },
+};
+
+#define vertex_list_count (sizeof(vertex_list)/sizeof(vertex_list[0]))
+
+static DVLB_s* vshader_dvlb;
+static shaderProgram_s program;
+static int uLoc_projection;
+static C3D_Mtx projection;
+
+static void* vbo_data;
+
+static void sceneInit(void)
+{
+	// Load the vertex shader, create a shader program and bind it
+	vshader_dvlb = DVLB_ParseFile((u32*)vshader_shbin, vshader_shbin_size);
+	shaderProgramInit(&program);
+	shaderProgramSetVsh(&program, &vshader_dvlb->DVLE[0]);
+	C3D_BindProgram(&program);
+
+	// Get the location of the uniforms
+	uLoc_projection = shaderInstanceGetUniformLocation(program.vertexShader, "projection");
+
+	// Configure attributes for use with the vertex shader
+	C3D_AttrInfo* attrInfo = C3D_GetAttrInfo();
+	AttrInfo_Init(attrInfo);
+	AttrInfo_AddLoader(attrInfo, 0, GPU_FLOAT, 3); // v0=position
+	AttrInfo_AddFixed(attrInfo, 1); // v1=color
+
+	// Set the fixed attribute (color) to solid white
+	C3D_FixedAttribSet(1, 1.0, 1.0, 1.0, 1.0);
+
+	// Compute the projection matrix
+	Mtx_OrthoTilt(&projection, 0.0, 400.0, 0.0, 240.0, 0.0, 1.0, true);
+
+	// Create the VBO (vertex buffer object)
+	vbo_data = linearAlloc(sizeof(vertex_list));
+	memcpy(vbo_data, vertex_list, sizeof(vertex_list));
+
+	// Configure buffers
+	C3D_BufInfo* bufInfo = C3D_GetBufInfo();
+	BufInfo_Init(bufInfo);
+	BufInfo_Add(bufInfo, vbo_data, sizeof(vertex), 1, 0x0);
+
+	// Configure the first fragment shading substage to just pass through the vertex color
+	// See https://www.opengl.org/sdk/docs/man2/xhtml/glTexEnv.xml for more insight
+	C3D_TexEnv* env = C3D_GetTexEnv(0);
+	C3D_TexEnvInit(env);
+	C3D_TexEnvSrc(env, C3D_Both, GPU_PRIMARY_COLOR, GPU_PRIMARY_COLOR, GPU_PRIMARY_COLOR);
+	C3D_TexEnvFunc(env, C3D_Both, GPU_REPLACE);
+}
+
+static void sceneRender(void)
+{
+	// Update the uniforms
+	C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection);
+
+	// Draw the VBO
+	C3D_DrawArrays(GPU_TRIANGLES, 0, vertex_list_count);
+}
+
+static void sceneExit(void)
+{
+	// Free the VBO
+	linearFree(vbo_data);
+
+	// Free the shader program
+	shaderProgramFree(&program);
+	DVLB_Free(vshader_dvlb);
+}
+
+int main()
+{
+	uint16_t width = 320, height = 240;
+
+	// Initialize graphics
 	gfxInitDefault();
 	C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
-	C2D_Init(C2D_DEFAULT_MAX_OBJECTS);
-	C2D_Prepare();
 
-	C3D_RenderTarget* top = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
-	consoleInit(GFX_TOP, NULL);
-	printf("Ho!\n");
+	// Initialize the render target
+	C3D_RenderTarget* target = C3D_RenderTargetCreate(height, width, GPU_RB_RGBA8, GPU_RB_DEPTH24_STENCIL8);
+	C3D_RenderTargetSetOutput(target, GFX_BOTTOM, GFX_LEFT, DISPLAY_TRANSFER_FLAGS);
+	C2D_Init(C2D_DEFAULT_MAX_OBJECTS);
+
+	// Initialize the scene
+	sceneInit();
 
 	ImGui::CreateContext();
 	//ImGui::SetMouseCursor()
@@ -33,38 +118,33 @@ int main(int argc, char* argv[])
 	imgui_sw::SwOptions sw_options;
 	imgui_sw::make_style_fast();
 
+	// Setup backend capabilities flags
+	imgui_sw::ImGui_ImplC3D_Data* bd = IM_NEW(imgui_sw::ImGui_ImplC3D_Data)();
+	io.BackendRendererUserData = (void*)bd;
+
+	// Set render target and parameters
+	bd->m_RenderTarget = target;
+	bd->m_Width = width;
+	bd->m_Height = height;
+
+	TickCounter m_FrameTime;
 	touchPosition touch;
-	time_t m_Time = 1.0f / 60.0f;
-	while (aptMainLoop()) 
+	// Main loop
+	while (aptMainLoop())
 	{
 		hidScanInput();
-		u32 kHeld = keysDown();
 
-		time_t f_time = time(NULL);
-		io.DeltaTime = m_Time > 0 ? difftime(f_time, m_Time) : (1.0f / 60.0f);
-		m_Time = f_time;
-
+		// Respond to user input
+		u32 kDown = hidKeysDown();
+		if (kDown & KEY_START)
+			break; // break in order to return to hbmenu
+			
+		io.DeltaTime = osTickCounterRead(&m_FrameTime) * 0.001f;
 
 		ImGui::NewFrame();
 		ImGui::ShowDemoWindow(NULL);
 		ImGui::Render();
 
-		memset(io.NavInputs, 0, sizeof(io.NavInputs));
-		#define MAP_BUTTON(NAV, BUTTON)       { if (kHeld & BUTTON) io.NavInputs[NAV] = 1.0f; }
-		MAP_BUTTON(ImGuiNavInput_Activate,    KEY_A);
-		MAP_BUTTON(ImGuiNavInput_Cancel,      KEY_B);
-		MAP_BUTTON(ImGuiNavInput_Menu,        KEY_Y);
-		MAP_BUTTON(ImGuiNavInput_Input,       KEY_X);
-		MAP_BUTTON(ImGuiNavInput_DpadLeft,    KEY_DLEFT);
-		MAP_BUTTON(ImGuiNavInput_DpadRight,   KEY_DRIGHT);
-		MAP_BUTTON(ImGuiNavInput_DpadUp,      KEY_DUP);
-		MAP_BUTTON(ImGuiNavInput_DpadDown,    KEY_DDOWN);
-		MAP_BUTTON(ImGuiNavInput_FocusPrev,   KEY_L);
-		MAP_BUTTON(ImGuiNavInput_FocusNext,   KEY_R);
-		//MAP_BUTTON(ImGuiNavInput_TweakSlow,   KEY_L);
-		//MAP_BUTTON(ImGuiNavInput_TweakFast,   KEY_R);
-		#undef MAP_BUTTON
-		io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
 		hidTouchRead(&touch);
 
 		//printf("px:%d, py:%d\n", touch.px, touch.py);
@@ -76,19 +156,26 @@ int main(int argc, char* argv[])
 		else
 		io.MouseDown[0] = false;
 
-		// overlay the GUI
-
-		// draw to screen
+		// Render the scene
 		C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-		C2D_SceneBegin(top);
-		paint_imgui(width, height, sw_options);
+			C3D_RenderTargetClear(target, C3D_CLEAR_ALL, CLEAR_COLOR, 0);
+			C3D_FrameDrawOn(target);
+			C2D_SceneTarget(target);
+			sceneRender();
+
+			C2D_Prepare();
+			osTickCounterStart(&m_FrameTime);
+			imgui_sw::paint_imgui(width, height, sw_options);
+			osTickCounterUpdate(&m_FrameTime);
+			C2D_Flush();
 		C3D_FrameEnd(0);
-		C2D_TargetClear(top, C2D_Color32(32,32,32, 0xFF));
 	}
 
-	imgui_sw::unbind_imgui_painting();
-	ImGui::DestroyContext();
-	gfxExit();
+	// Deinitialize the scene
+	sceneExit();
 
+	// Deinitialize graphics
+	C3D_Fini();
+	gfxExit();
 	return 0;
 }

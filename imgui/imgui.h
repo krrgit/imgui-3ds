@@ -1084,6 +1084,14 @@ struct ImGuiIO
     int         MetricsRenderIndices;       // Indices output during last call to Render() = number of triangles * 3
     int         MetricsActiveWindows;       // Number of visible root windows (exclude child windows)
     ImVec2      MouseDelta;                 // Mouse delta. Note that this is zero if either current or previous position are invalid (-FLT_MAX,-FLT_MAX), so a disappearing/reappearing mouse won't have a huge delta.
+    
+    //------------------------------------------------------------------
+    // Platform Functions
+    // (the imgui_impl_xxxx backend files are setting those up for you)
+    //------------------------------------------------------------------
+
+    // Optional: Platform/Renderer backend name (informational only! will be displayed in About Window) + User data for backend/wrappers to store their own stuff.
+    void* BackendRendererUserData;        // = NULL           // User data for renderer backend
 
     //------------------------------------------------------------------
     // [Internal] ImGui will maintain those fields. Forward compatibility not guaranteed!

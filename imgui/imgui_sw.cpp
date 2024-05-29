@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "imgui.h"
-#include <citro2d.h>
+
 #include <memory>
 
 namespace imgui_sw {
