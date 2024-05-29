@@ -127,7 +127,7 @@ int main()
 	bd->m_Width = width;
 	bd->m_Height = height;
 
-	TickCounter m_FrameTime;
+	TickCounter frameTime;
 	touchPosition touch;
 	// Main loop
 	while (aptMainLoop())
@@ -139,7 +139,9 @@ int main()
 		if (kDown & KEY_START)
 			break; // break in order to return to hbmenu
 			
-		io.DeltaTime = osTickCounterRead(&m_FrameTime) * 0.001f;
+		osTickCounterUpdate(&frameTime);
+		io.DeltaTime = osTickCounterRead(&frameTime) * 0.001f;
+		osTickCounterStart(&frameTime);
 
 		ImGui::NewFrame();
 		ImGui::ShowDemoWindow(NULL);
@@ -164,9 +166,7 @@ int main()
 			sceneRender();
 
 			C2D_Prepare();
-			osTickCounterStart(&m_FrameTime);
 			imgui_sw::paint_imgui(width, height, sw_options);
-			osTickCounterUpdate(&m_FrameTime);
 			C2D_Flush();
 		C3D_FrameEnd(0);
 	}
