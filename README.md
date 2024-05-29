@@ -2,6 +2,11 @@
 
 Dear ImGui is a bloat-free graphical user interface library for C++. This fork has been better optimized for the 3DS.
 
+## After
+![](https://github.com/krrgit/imgui-3ds/blob/master/imgui_after.PNG)
+## Before
+![](https://github.com/krrgit/imgui-3ds/blob/master/imgui_before.PNG)
+
 License
 -------
 
