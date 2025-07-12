@@ -3,6 +3,8 @@
 //   This software is dual-licensed to the public domain and under the following
 //   license: you are granted a perpetual, irrevocable license to copy, modify,
 //   publish, and distribute this file as you see fit.
+
+#define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui_sw.h"
 
 #include <cmath>
@@ -61,34 +63,6 @@ namespace imgui_sw {
 		Barycentric operator+(const Barycentric& a, const Barycentric& b)
 		{
 			return Barycentric{ a.w0 + b.w0, a.w1 + b.w1, a.w2 + b.w2 };
-		}
-
-		// ----------------------------------------------------------------------------
-		// Useful operators on ImGui vectors:
-
-		ImVec2 operator*(const float f, const ImVec2& v)
-		{
-			return ImVec2{ f * v.x, f * v.y };
-		}
-
-		ImVec2 operator+(const ImVec2& a, const ImVec2& b)
-		{
-			return ImVec2{ a.x + b.x, a.y + b.y };
-		}
-
-		bool operator!=(const ImVec2& a, const ImVec2& b)
-		{
-			return a.x != b.x || a.y != b.y;
-		}
-
-		ImVec4 operator*(const float f, const ImVec4& v)
-		{
-			return ImVec4{ f * v.x, f * v.y, f * v.z, f * v.w };
-		}
-
-		ImVec4 operator+(const ImVec4& a, const ImVec4& b)
-		{
-			return ImVec4{ a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w };
 		}
 
 		// ----------------------------------------------------------------------------
@@ -262,15 +236,15 @@ namespace imgui_sw {
 			//------------------------------------------------------
 			// (0,0) in imgui is topleft
 			// (0,1) in c2d is topleft
-			const ImVec2 uv = bary.w0 * v0.uv + bary.w1 * v1.uv + bary.w2 * v2.uv;
+			const ImVec2 uv = v0.uv * bary.w0 + v1.uv * bary.w1 + v2.uv * bary.w2;
 			uint16_t pixelWidth = max_x_i - min_x_i;
 			uint16_t pixelHeight = max_y_i - min_y_i;
+
 			float C2D_uv_left = uv.x - (0.5f / texture->width);
 			float C2D_uv_top = 1.0f - uv.y + (0.5f / texture->height);
 			float C2D_uv_right = C2D_uv_left + ((pixelWidth + 0.5f) / texture->width);
 			float C2D_uv_bot = C2D_uv_top - ((pixelHeight + 0.5f) / texture->height);
-
-
+			
 			Tex3DS_SubTexture subt3x = { pixelWidth, pixelHeight, C2D_uv_left, C2D_uv_top, C2D_uv_right, C2D_uv_bot };
 			C2D_Image image = (C2D_Image){ texture, &subt3x };
 
@@ -305,11 +279,12 @@ namespace imgui_sw {
 			const SwOptions& options,
 			Stats* stats)
 		{
-			auto texture = reinterpret_cast<C3D_Tex*>(pcmd.TextureId);
+			auto texture = reinterpret_cast<C3D_Tex*>(pcmd.GetTexID());
 			assert(texture);
 
 			// ImGui uses the first pixel for "white".
-			const ImVec2 white_uv = ImVec2(0.5f / texture->width, 0.5f / texture->height);
+			const ImVec2 white_uv = ImGui::GetFontTexUvWhitePixel();
+			// OLD: const ImVec2 white_uv = ImVec2(0.5f / texture->width, 0.5f / texture->height);
 
 			for (unsigned int i = 0; i + 3 <= pcmd.ElemCount; ) {
 				const ImDrawVert& v0 = vertices[idx_buffer[i + 0]];
@@ -470,7 +445,7 @@ namespace imgui_sw {
 	void unbind_imgui_painting()
 	{
 		ImGuiIO& io = ImGui::GetIO();
-		delete reinterpret_cast<C3D_Tex*>(io.Fonts->TexID);
+		delete reinterpret_cast<C3D_Tex*>( io.Fonts->TexData->TexID );
 		io.Fonts = nullptr;
 	}
 

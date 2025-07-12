@@ -113,6 +113,7 @@ int main()
 	ImGuiIO& io = ImGui::GetIO();
 	io.DisplaySize = ImVec2((float)width, (float)height);
  	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	io.MouseDrawCursor = true;
 	imgui_sw::bind_imgui_painting();
 	imgui_sw::SwOptions sw_options;
