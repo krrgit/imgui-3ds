@@ -193,6 +193,8 @@ namespace imgui_sw {
 			min_y_f = std::max(min_y_f, target.scale.y * clip_rect.y);
 			max_x_f = std::min(max_x_f, target.scale.x * clip_rect.z);
 			max_y_f = std::min(max_y_f, target.scale.y * clip_rect.w);
+			max_x_f = std::max(min_x_f, max_x_f);
+			max_y_f = std::max(min_y_f, max_y_f);
 
 			// Inclusive [min, max] integer bounding box:
 			int min_x_i = static_cast<int>(min_x_f + 0.5f);
@@ -255,6 +257,7 @@ namespace imgui_sw {
 				{v0.col, 1.0f}
 			} };
 			C2D_DrawImageAt(image, min_x_i, min_y_i, 0.0f, &tint, 1.0f, 1.0f);
+			// C2D_DrawRectangle(min_x_i, min_y_i, 0.0f, max_x_i - min_x_i, max_y_i - min_y_i,  v0.col, v0.col, v0.col, v0.col);
 			s_imageCount++;
 		}
 
