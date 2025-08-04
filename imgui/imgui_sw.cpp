@@ -135,6 +135,11 @@ namespace imgui_sw {
 			max_x_i = std::min(max_x_i, target.width);
 			max_y_i = std::min(max_y_i, target.height);
 
+			// Clamp bottom edge to top edge
+			max_x_i = std::max(min_x_i, max_x_i);
+			max_y_i = std::max(min_y_i, max_y_i);
+
+
 			C2D_DrawRectSolid(min_x_i, min_y_i, 0.0f, max_x_i - min_x_i, max_y_i - min_y_i, color);
 		}
 
@@ -159,6 +164,10 @@ namespace imgui_sw {
 			min_y_i = std::max(min_y_i, 0);
 			max_x_i = std::min(max_x_i, target.width);
 			max_y_i = std::min(max_y_i, target.height);
+
+			// Clamp bottom edge to top edge
+			max_x_i = std::max(min_x_i, max_x_i);
+			max_y_i = std::max(min_y_i, max_y_i);
 
 			C2D_DrawRectangle(min_x_i, min_y_i, 0.0f, max_x_i - min_x_i, max_y_i - min_y_i, 
 				col0, col1, col2, col3);
@@ -193,6 +202,8 @@ namespace imgui_sw {
 			min_y_f = std::max(min_y_f, target.scale.y * clip_rect.y);
 			max_x_f = std::min(max_x_f, target.scale.x * clip_rect.z);
 			max_y_f = std::min(max_y_f, target.scale.y * clip_rect.w);
+
+			// Clamp bottom edge to top edge
 			max_x_f = std::max(min_x_f, max_x_f);
 			max_y_f = std::max(min_y_f, max_y_f);
 
@@ -263,15 +274,86 @@ namespace imgui_sw {
 
 		void paint_uniform_triangle(
 			const PaintTarget& target,
+			const ImVec4& clip_rect,
 			const ImDrawVert& v0,
 			const ImDrawVert& v1,
 			const ImDrawVert& v2,
 			Stats* stats)
 		{
-			C2D_DrawTriangle(v0.pos.x, v0.pos.y, v0.col,
-				v1.pos.x, v1.pos.y, v1.col,
-				v2.pos.x, v2.pos.y, v2.col, 0.0f
-			);
+			// Find bounding box:
+			float min_x_f = min3(v0.pos.x, v1.pos.x, v2.pos.x);
+			float min_y_f = min3(v0.pos.y, v1.pos.y, v2.pos.y);
+			float max_x_f = max3(v0.pos.x, v1.pos.x, v2.pos.x);
+			float max_y_f = max3(v0.pos.y, v1.pos.y, v2.pos.y);
+
+			// Draw triangle when not clipped
+			bool notClipped = 	min_x_f >= target.scale.x * clip_rect.x && 
+								min_y_f >= target.scale.y * clip_rect.y && 
+								max_x_f <= target.scale.x * clip_rect.z &&
+								max_y_f <= target.scale.y * clip_rect.w;
+
+			// Clamp to clip_rect:
+			min_x_f = std::max(min_x_f, target.scale.x * clip_rect.x);
+			min_y_f = std::max(min_y_f, target.scale.y * clip_rect.y);
+			max_x_f = std::min(max_x_f, target.scale.x * clip_rect.z);
+			max_y_f = std::min(max_y_f, target.scale.y * clip_rect.w);
+			
+			// Clamp bottom edge to top edge
+			max_x_f = std::max(min_x_f, max_x_f);
+			max_y_f = std::max(min_y_f, max_y_f);
+
+			// Inclusive [min, max] integer bounding box:
+			int min_x_i = static_cast<int>(min_x_f + 0.5f);
+			int min_y_i = static_cast<int>(min_y_f + 0.5f);
+			int max_x_i = static_cast<int>(max_x_f + 0.5f);
+			int max_y_i = static_cast<int>(max_y_f + 0.5f);
+
+			// Clamp to render target:
+			min_x_i = std::max(min_x_i, 0);
+			min_y_i = std::max(min_y_i, 0);
+			max_x_i = std::min(max_x_i, target.width - 1);
+			max_y_i = std::min(max_y_i, target.height - 1);
+
+			if (notClipped) {
+				C2D_DrawTriangle(v0.pos.x, v0.pos.y, v0.col,
+					v1.pos.x, v1.pos.y, v1.col,
+					v2.pos.x, v2.pos.y, v2.col, 0.0f
+				);
+
+			} else {
+				// Precompute edge functions for barycentric test
+				float x0 = v0.pos.x, y0 = v0.pos.y;
+				float x1 = v1.pos.x, y1 = v1.pos.y;
+				float x2 = v2.pos.x, y2 = v2.pos.y;
+
+				float area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+				if (area == 0.0f) return; // Degenerate triangle
+
+				// Draw clipped triangle
+				for (int y = min_y_i; y <= max_y_i; ++y) {
+					for (int x = min_x_i; x <= max_x_i; ++x) {
+						// Pixel center sampling
+						float px = x + 0.5f;
+						float py = y + 0.5f;
+
+						// Compute barycentric coordinates
+						float w0 = (x1 - px) * (y2 - py) - (x2 - px) * (y1 - py);
+						float w1 = (x2 - px) * (y0 - py) - (x0 - px) * (y2 - py);
+						float w2 = (x0 - px) * (y1 - py) - (x1 - px) * (y0 - py);
+
+						// All weights must be same sign as area
+						if ((w0 >= 0 && w1 >= 0 && w2 >= 0 && area > 0) ||
+							(w0 <= 0 && w1 <= 0 && w2 <= 0 && area < 0))
+						{
+							// Inside triangle — draw pixel
+							C2D_DrawRectSolid((float)x, (float)y, 0.0f, 1.0f, 1.0f, v0.col);
+						}
+					}
+				}
+
+			}
+
+
 		}
 
 		void paint_draw_cmd(
@@ -366,7 +448,7 @@ namespace imgui_sw {
 					}
 				}
 
-				paint_uniform_triangle(target, v0, v1, v2, stats);
+				paint_uniform_triangle(target, pcmd.ClipRect, v0, v1, v2, stats);
 				i += 3;
 			}
 		}
