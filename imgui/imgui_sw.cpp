@@ -331,24 +331,33 @@ namespace imgui_sw {
 
 				// Draw clipped triangle
 				for (int y = min_y_i; y <= max_y_i; ++y) {
+					int start_x = min_x_i;
+					int end_x = start_x;
+					
+					// Draw by row
 					for (int x = min_x_i; x <= max_x_i; ++x) {
 						// Pixel center sampling
 						float px = x + 0.5f;
 						float py = y + 0.5f;
-
+						
 						// Compute barycentric coordinates
 						float w0 = (x1 - px) * (y2 - py) - (x2 - px) * (y1 - py);
 						float w1 = (x2 - px) * (y0 - py) - (x0 - px) * (y2 - py);
 						float w2 = (x0 - px) * (y1 - py) - (x1 - px) * (y0 - py);
-
+						
 						// All weights must be same sign as area
 						if ((w0 >= 0 && w1 >= 0 && w2 >= 0 && area > 0) ||
-							(w0 <= 0 && w1 <= 0 && w2 <= 0 && area < 0))
+						(w0 <= 0 && w1 <= 0 && w2 <= 0 && area < 0))
 						{
 							// Inside triangle — draw pixel
-							C2D_DrawRectSolid((float)x, (float)y, 0.0f, 1.0f, 1.0f, v0.col);
+							end_x += 1;
+						} else {
+							// Row ends. stop check.
+							break;
 						}
 					}
+					// Draw row
+					C2D_DrawRectSolid((float)start_x, (float)y, 0.0f, end_x - start_x, 1.0f, v0.col);
 				}
 
 			}
