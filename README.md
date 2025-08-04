@@ -1,5 +1,6 @@
-# dear imgui-docking (v. 1.92.1) for the 3DS - https://github.com/ocornut/imgui
+# dear imgui-docking - https://github.com/ocornut/imgui
 
+## Current Version: v. 1.92.1
 Dear ImGui is a bloat-free graphical user interface library for C++. This fork has been better optimized for the 3DS.
 
 ## After (w/ fixed colors)
